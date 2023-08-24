@@ -2,6 +2,13 @@ import re
 from urllib.parse import urljoin
 from xml.etree import ElementTree as ET
 
+from bs4 import BeautifulSoup
+
+
+# import warnings
+# from bs4 import UserWarning
+# warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
+
 
 def relative_to_absolute(root, base_url):
     for element in root.iter():
@@ -12,11 +19,9 @@ def relative_to_absolute(root, base_url):
 
 
 class XMLParser(ET.XMLParser):
-    def __init__(self, *, remove_comments=False, **kwargs):
-        if not remove_comments:
-            super().__init__()
-        else:
-            super().__init__(target=CommentedTreeBuilder())
+    def __init__(self, *, remove_comments: bool = False, remove_pis: bool = True, **kwargs):
+        super(XMLParser, self).__init__(
+            target=ET.TreeBuilder(insert_pis=not remove_pis, insert_comments=not remove_comments))
 
 
 def remove_attribute(element: ET.Element, attributes_to_delete):
@@ -28,21 +33,23 @@ def remove_attribute(element: ET.Element, attributes_to_delete):
                 break
 
 
-def Comment(text=None):
-    """
-    Comment(text=None)
+# def Comment(text=None):
+#     """
+#     Comment(text=None)
+#
+#         Comment element factory. This factory function creates a special element that will
+#         be serialized as an XML comment.
+#     """
+#     return ET.Comment
 
-        Comment element factory. This factory function creates a special element that will
-        be serialized as an XML comment.
-    """
-    return ET.Comment(text=text)
+Comment = ET.Comment
 
 
-class CommentedTreeBuilder(ET.TreeBuilder):
-    def comment(self, data):
-        self.start(ET.Comment, {})
-        self.data(data)
-        self.end(ET.Comment)
+# class CommentedTreeBuilder(ET.TreeBuilder):
+#     def comment(self, data):
+#         self.start(ET.Comment, {})
+#         self.data(data)
+#         self.end(ET.Comment)
 
 
 def dump(elem, pretty_print=True, with_tail=True):
@@ -74,9 +81,6 @@ def Element(_tag, attrib=None, nsmap=None, **_extra):
                 ET.register_namespace(key, nsmap[key])
         else:
             raise TypeError("nsmap should be type dictionary")
-    # print("************************************")
-    # print(_tag)
-    # print("************************************")
     element = ET.Element(_tag, attrib or {}, **_extra)
     return element
 
@@ -95,6 +99,25 @@ def ElementTree(element=None, file=None, parser=None):
         return None
 
 
+def pre_process(html_content):
+    tags = set(re.findall(r'<\/?([a-zA-Z_][\w.-]*)>', html_content))
+    mapping = {tag: f"TAG{index}" for index, tag in enumerate(tags)}
+
+    def replacement(m):
+        return f"{m.group(1)}{mapping[m.group(2)]}{m.group(3)}"
+
+    processed = re.sub(r'(<\/?)([a-zA-Z_][\w.-]*)(>)', replacement, html_content)
+    return processed, mapping
+
+
+def post_process(soup, mapping):
+    reverse_mapping = {v: k for k, v in mapping.items()}
+    # print(reverse_mapping, soup)
+    for tag in soup.find_all(True):
+        if tag.name.upper() in reverse_mapping:
+            tag.name = reverse_mapping[tag.name.upper()]
+
+
 def fromstring(text, parser=None, base_url=None):
     """
     fromstring(text, parser=None, base_url=None)
@@ -109,7 +132,16 @@ def fromstring(text, parser=None, base_url=None):
         the document to support relative Paths when looking up external entities
         (DTD, XInclude, ...).
     """
-    print(text, "***********************************")
+    if type(text) == bytes:
+        text = text.decode()
+    # text = text.strip().strip("'").strip("\n'").strip("\n")
+    processed_html, mapping = pre_process(text)
+    # print(mapping, processed_html)
+    soup = BeautifulSoup(processed_html, "html.parser")
+    post_process(soup, mapping)
+    text = str(soup)
+    # if "<?xml" in text:
+    #     text = text[38:]
     root = ET.fromstring(text=text, parser=parser)
     if base_url:
         relative_to_absolute(root, base_url)
@@ -239,10 +271,10 @@ def strip_elements(tree_or_element, *tag_names, with_tail=True):
     else:
         root = tree_or_element
     parent_map = {c: p for p in root.iter() for c in p}
-    print(parent_map)
+    # print(parent_map)
     for tag in tag_names:
         if type(tag) == str:
-            elements_to_be_removed = root.findall(tag)
+            elements_to_be_removed = root.findall(".//" + tag)
             for element_to_be_removed in elements_to_be_removed:
                 if with_tail:
                     if element_to_be_removed.tail:
@@ -288,23 +320,12 @@ def strip_tags(tree_or_element, *tag_names):
         root = tree_or_element
     tags_to_remove = dict()
     parent_map = {c: p for p in root.iter() for c in p}
-    print(parent_map)
-    # for tag in tag_names:
-    #     if iselement(tag):
-    #         if tag.tag == ET.Comment:
-    #             tags_to_remove['Comment'] = 1
-    #     else:
-    #         tags_to_remove[tag] = 1
-    # all_elements = root.findall(".//")
-    # for element in all_elements:
-    #     if element.tag in tags_to_remove:
-    #         parent = element.find(f".//{element.tag}/..")
     for tag in tag_names:
-        print(tag == ET.Comment)
         if tag == ET.Comment:
             for element in root.findall(".//"):
                 if element.tag == ET.Comment:
                     parent = parent_map[element]
+                    parent.text = element.tail
                     parent.remove(element)
 
 
@@ -337,3 +358,18 @@ def tostring(element_or_tree, method=None, encoding=None, pretty_print=False):
     if pretty_print:
         ET.indent(element_or_tree)
     return ET.tostring(element_or_tree, encoding, method)
+
+
+class XPath:
+    def __init__(self, path):
+        self.path = path
+
+    def __call__(self, element: ET.Element):
+        if self.path == "//comment()":
+            tags = []
+            for ele in element.iter():
+                if ele.tag == ET.Comment:
+                    tags.append(ele)
+            return tags
+        else:
+            return element.findall(self.path)
