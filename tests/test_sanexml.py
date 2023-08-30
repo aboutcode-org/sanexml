@@ -44,7 +44,7 @@ class TestSaneXMLEtreeMethods(unittest.TestCase):
     #     self.assertIsNone(element.get('attr'))
 
     def test_strip_elements(self):
-        xml_string = '<root><child><subchild/></child></root>'
+        xml_string = '<root><child><subchild/></child><close>LoremIpsum</close></root>'
         element = etree.fromstring(xml_string)
         etree.strip_elements(element, 'subchild')
         self.assertNotIn('subchild', [e.tag for e in element.iter()])
