@@ -1,3 +1,12 @@
+#
+# Copyright (c) nexB Inc. and others. All rights reserved.
+# sanexml is a trademark of nexB Inc.
+# SPDX-License-Identifier: Apache-2.0
+# See http://www.apache.org/licenses/LICENSE-2.0 for the license text.
+# See https://github.com/nexB/sanexml for support or download.
+# See https://aboutcode.org for more information about nexB OSS projects.
+#
+
 import unittest
 from sanexml import etree
 
@@ -37,11 +46,15 @@ class TestSaneXMLEtreeMethods(unittest.TestCase):
         self.assertTrue(etree.iselement(element))
         self.assertFalse(etree.iselement('not an element'))
 
-    # def test_strip_attributes(self):
-    #     xml_string = '<root attr="value"><child>text</child></root>'
-    #     element = etree.fromstring(xml_string)
-    #     etree.strip_attributes(element, ['attr'])
-    #     self.assertIsNone(element.get('attr'))
+    def test_strip_attributes(self):
+        xml_string = '<root attr="value"><child attic="meow">text</child></root>'
+        element1 = etree.fromstring(xml_string)
+        element2 = etree.fromstring(xml_string)
+        etree.strip_attributes(element1, 'attr')
+        etree.strip_attributes(element2, 'att*')
+        self.assertIsNone(element1.get('attr'))
+        self.assertIsNone(element2.get('attr'))
+        self.assertIsNone(element2.get('attic'))
 
     def test_strip_elements(self):
         xml_string = '<root><child><subchild/></child><close>LoremIpsum</close></root>'

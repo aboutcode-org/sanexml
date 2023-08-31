@@ -1,13 +1,17 @@
+#
+# Copyright (c) nexB Inc. and others. All rights reserved.
+# sanexml is a trademark of nexB Inc.
+# SPDX-License-Identifier: Apache-2.0
+# See http://www.apache.org/licenses/LICENSE-2.0 for the license text.
+# See https://github.com/nexB/sanexml for support or download.
+# See https://aboutcode.org for more information about nexB OSS projects.
+#
+
 import re
 from urllib.parse import urljoin
 from xml.etree import ElementTree as ET
 
 from bs4 import BeautifulSoup
-
-
-# import warnings
-# from bs4 import UserWarning
-# warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
 
 
 def relative_to_absolute(root, base_url):
@@ -33,23 +37,7 @@ def remove_attribute(element: ET.Element, attributes_to_delete):
                 break
 
 
-# def Comment(text=None):
-#     """
-#     Comment(text=None)
-#
-#         Comment element factory. This factory function creates a special element that will
-#         be serialized as an XML comment.
-#     """
-#     return ET.Comment
-
 Comment = ET.Comment
-
-
-# class CommentedTreeBuilder(ET.TreeBuilder):
-#     def comment(self, data):
-#         self.start(ET.Comment, {})
-#         self.data(data)
-#         self.end(ET.Comment)
 
 
 def dump(elem, pretty_print=True, with_tail=True):
@@ -77,8 +65,8 @@ def Element(_tag, attrib=None, nsmap=None, **_extra):
     """
     if nsmap:
         if type(nsmap) == dict:
-            for key in nsmap:
-                ET.register_namespace(key, nsmap[key])
+            for key, value in nsmap.items():
+                ET.register_namespace(key, value)
         else:
             raise TypeError("nsmap should be type dictionary")
     element = ET.Element(_tag, attrib or {}, **_extra)
@@ -112,10 +100,10 @@ def pre_process(html_content):
 
 def post_process(soup, mapping):
     reverse_mapping = {v: k for k, v in mapping.items()}
-    # print(reverse_mapping, soup)
     for tag in soup.find_all(True):
-        if tag.name.upper() in reverse_mapping:
-            tag.name = reverse_mapping[tag.name.upper()]
+        tag_name_upper = tag.name.upper()
+        if tag_name_upper in reverse_mapping:
+            tag.name = reverse_mapping[tag_name_upper]
 
 
 def fromstring(text, parser=None, base_url=None):
@@ -134,14 +122,10 @@ def fromstring(text, parser=None, base_url=None):
     """
     if type(text) == bytes:
         text = text.decode()
-    # text = text.strip().strip("'").strip("\n'").strip("\n")
     processed_html, mapping = pre_process(text)
-    # print(mapping, processed_html)
     soup = BeautifulSoup(processed_html, "html.parser")
     post_process(soup, mapping)
     text = str(soup)
-    # if "<?xml" in text:
-    #     text = text[38:]
     root = ET.fromstring(text=text, parser=parser)
     if base_url:
         relative_to_absolute(root, base_url)
@@ -286,7 +270,6 @@ def strip_elements(tree_or_element, *tag_names, with_tail=True):
     else:
         root = tree_or_element
     parent_map = {c: p for p in root.iter() for c in p}
-    # print(parent_map)
     for tag in tag_names:
         if type(tag) == str:
             elements_to_be_removed = root.findall(".//" + tag)
